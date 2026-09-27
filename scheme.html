@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scheme Calculator</title>
+    <style>
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            background-color: #f5f5f5;
+            color: #000;
+            margin: 0;
+            padding: 20px;
+            font-size: 14px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            padding: 20px;
+        }
+        h1 {
+            color: #003366;
+            font-size: 20px;
+            border-bottom: 2px solid #003366;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="number"] {
+            width: 200px;
+            padding: 5px;
+            border: 1px solid #999;
+            border-radius: 2px;
+        }
+        button {
+            background-color: #003366;
+            color: #fff;
+            border: none;
+            padding: 8px 15px;
+            cursor: pointer;
+            border-radius: 2px;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #002244;
+        }
+        .summary-panel {
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            padding: 15px;
+            background-color: #fafafa;
+            display: none;
+        }
+        .summary-panel h2 {
+            font-size: 16px;
+            color: #003366;
+            margin-top: 0;
+        }
+        .summary-item {
+            margin-bottom: 8px;
+        }
+        .summary-item strong {
+            display: inline-block;
+            width: 200px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: right;
+        }
+        th {
+            background-color: #003366;
+            color: #fff;
+            text-align: center;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .error-message {
+            color: #cc0000;
+            font-weight: bold;
+            margin-top: 20px;
+            display: none;
+        }
+        .hidden {
+            display: none;
+        }
+        #toggle-rows {
+            margin-top: 10px;
+            background-color: #666;
+        }
+        #toggle-rows:hover {
+            background-color: #444;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Scheme Calculator</h1>
+    
+    <div class="form-group">
+        <label for="marginMoney">Available Margin Money (₹):</label>
+        <input type="number" id="marginMoney" min="0" step="1">
+    </div>
+    <button onclick="calculate()">Calculate</button>
+
+    <div id="errorMessage" class="error-message"></div>
+
+    <div id="summaryPanel" class="summary-panel">
+        <h2>Calculation Summary</h2>
+        <div class="summary-item"><strong>Project Cost:</strong> <span id="outProjectCost"></span></div>
+        <div class="summary-item"><strong>Eligible Loan Amount:</strong> <span id="outLoanAmount"></span></div>
+        <div class="summary-item"><strong>Scheme Name:</strong> <span id="outScheme"></span></div>
+        <div class="summary-item"><strong>Interest Rate (p.a.):</strong> <span id="outInterest"></span></div>
+        <div class="summary-item"><strong>Tenure:</strong> <span id="outTenure"></span></div>
+        <div class="summary-item"><strong>Moratorium:</strong> <span id="outMoratorium"></span></div>
+        <div class="summary-item"><strong>Max Loan Disbursed:</strong> <span id="outMaxLoan"></span></div>
+        
+        <h2 style="margin-top: 20px;">Repayment Details</h2>
+        <div class="summary-item"><strong>EMI Amount:</strong> <span id="outEMI"></span></div>
+        <div class="summary-item"><strong>First Payment Date:</strong> <span id="outFirstDate"></span></div>
+        <div class="summary-item"><strong>Total Interest Payable:</strong> <span id="outTotalInterest"></span></div>
+        <div class="summary-item"><strong>Total Repayment:</strong> <span id="outTotalRepayment"></span></div>
+
+        <h2 style="margin-top: 20px;">Quarterly Repayment Schedule</h2>
+        <table id="scheduleTable">
+            <thead>
+                <tr>
+                    <th>Quarter</th>
+                    <th>Principal (₹)</th>
+                    <th>Interest (₹)</th>
+                    <th>Balance Remaining (₹)</th>
+                </tr>
+            </thead>
+            <tbody id="scheduleBody">
+            </tbody>
+        </table>
+        <button id="toggle-rows" onclick="toggleRows()" style="display: none;">Show All Quarters</button>
+    </div>
+</div>
+
+<script>
+    function formatCurrency(num) {
+        return "₹" + num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    let allRowsVisible = false;
+
+    function calculate() {
+        const marginInput = document.getElementById('marginMoney').value;
+        if (!marginInput || marginInput <= 0) return;
+        
+        const marginMoney = parseFloat(marginInput);
+        const projectCost = marginMoney / 0.10;
+        const loanAmount = projectCost * 0.90;
+        
+        const errorDiv = document.getElementById('errorMessage');
+        const summaryDiv = document.getElementById('summaryPanel');
+        
+        errorDiv.style.display = 'none';
+        summaryDiv.style.display = 'none';
+        
+        if (projectCost > 5000000) {
+            errorDiv.innerText = "Not eligible under current scheme thresholds — consult SCA for custom structuring";
+            errorDiv.style.display = 'block';
+            return;
+        }
+        
+        let schemeName, interestRate, tenureYears, moratoriumMonths, maxLoanLimit;
+        
+        if (projectCost <= 140000) {
+            schemeName = "Micro Finance Scheme";
+            interestRate = 6.5;
+            tenureYears = 3;
+            moratoriumMonths = 3;
+            maxLoanLimit = 125000;
+        } else {
+            schemeName = "Term Loan Scheme";
+            interestRate = 8.0;
+            tenureYears = 7;
+            moratoriumMonths = 6;
+            maxLoanLimit = 4500000;
+        }
+        
+        const maxLoan = Math.min(loanAmount, maxLoanLimit);
+        
+        const N = (tenureYears * 12) - moratoriumMonths;
+        const R = interestRate / 12 / 100;
+        const P = maxLoan;
+        
+        const emi = (P * R * Math.pow(1 + R, N)) / (Math.pow(1 + R, N) - 1);
+        
+        const totalRepayment = emi * N;
+        const totalInterest = totalRepayment - P;
+        
+        const today = new Date();
+        today.setMonth(today.getMonth() + moratoriumMonths);
+        const firstPaymentDate = today.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+        
+        document.getElementById('outProjectCost').innerText = formatCurrency(projectCost);
+        document.getElementById('outLoanAmount').innerText = formatCurrency(loanAmount);
+        document.getElementById('outScheme').innerText = schemeName;
+        document.getElementById('outInterest').innerText = interestRate + "%";
+        document.getElementById('outTenure').innerText = tenureYears + " years";
+        document.getElementById('outMoratorium').innerText = moratoriumMonths + " months";
+        document.getElementById('outMaxLoan').innerText = formatCurrency(maxLoan);
+        
+        document.getElementById('outEMI').innerText = formatCurrency(emi);
+        document.getElementById('outFirstDate').innerText = firstPaymentDate;
+        document.getElementById('outTotalInterest').innerText = formatCurrency(totalInterest);
+        document.getElementById('outTotalRepayment').innerText = formatCurrency(totalRepayment);
+        
+        generateSchedule(P, R, N);
+        
+        summaryDiv.style.display = 'block';
+    }
+    
+    function generateSchedule(P, R, N) {
+        const tbody = document.getElementById('scheduleBody');
+        tbody.innerHTML = '';
+        
+        let balance = P;
+        let emi = (P * R * Math.pow(1 + R, N)) / (Math.pow(1 + R, N) - 1);
+        let currentQtrPrincipal = 0;
+        let currentQtrInterest = 0;
+        let quarterNum = 1;
+        
+        const trs = [];
+        
+        for (let i = 1; i <= N; i++) {
+            let interest = balance * R;
+            let principal = emi - interest;
+            
+            // Due to rounding, the last payment might be slightly different
+            if (i === N) {
+                principal = balance;
+                interest = (emi - principal > 0) ? emi - principal : interest;
+            }
+            
+            currentQtrPrincipal += principal;
+            currentQtrInterest += interest;
+            balance -= principal;
+            if (balance < 0) balance = 0;
+            
+            if (i % 3 === 0 || i === N) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="text-align: center;">${quarterNum}</td>
+                    <td>${formatCurrency(currentQtrPrincipal)}</td>
+                    <td>${formatCurrency(currentQtrInterest)}</td>
+                    <td>${formatCurrency(balance)}</td>
+                `;
+                trs.push(tr);
+                
+                currentQtrPrincipal = 0;
+                currentQtrInterest = 0;
+                quarterNum++;
+            }
+        }
+        
+        trs.forEach((tr, index) => {
+            if (index >= 8) {
+                tr.classList.add('hidden-row', 'hidden');
+            }
+            tbody.appendChild(tr);
+        });
+        
+        const toggleBtn = document.getElementById('toggle-rows');
+        if (trs.length > 8) {
+            toggleBtn.style.display = 'inline-block';
+            toggleBtn.innerText = "Show All Quarters";
+            allRowsVisible = false;
+        } else {
+            toggleBtn.style.display = 'none';
+        }
+    }
+    
+    function toggleRows() {
+        const rows = document.querySelectorAll('.hidden-row');
+        const btn = document.getElementById('toggle-rows');
+        
+        allRowsVisible = !allRowsVisible;
+        
+        rows.forEach(row => {
+            if (allRowsVisible) {
+                row.classList.remove('hidden');
+            } else {
+                row.classList.add('hidden');
+            }
+        });
+        
+        btn.innerText = allRowsVisible ? "Show First 8 Quarters" : "Show All Quarters";
+    }
+</script>
+</body>
+</html>
